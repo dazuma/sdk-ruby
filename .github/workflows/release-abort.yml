@@ -1,0 +1,26 @@
+name: Check Release Abort
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  release-abort-check:
+    if: ${{ github.repository_owner == 'dazuma' && !github.event.pull_request.merged_at }}
+    env:
+      ruby_version: "2.7"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Ruby ${{ env.ruby_version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.ruby_version }}
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Install Toys
+        run: "gem install --no-document toys"
+      - name: Abort release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          toys release _abort --verbose < /dev/null

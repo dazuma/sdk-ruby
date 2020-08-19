@@ -1,0 +1,5 @@
+repo: dazuma/sdk-ruby
+main_branch: master
+gems:
+  - name: cloud_events
+    toplevel_docs: true
