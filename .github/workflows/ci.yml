@@ -1,4 +1,4 @@
-name: CloudEvents CI
+name: CI
 
 on:
   push:
@@ -10,6 +10,7 @@ on:
 
 jobs:
   test:
+    if: ${{ github.repository_owner == 'dazuma' }}
     strategy:
       matrix:
         os: [ ubuntu-latest ]
@@ -36,4 +37,27 @@ jobs:
         run: "bundle install && gem install --no-document toys"
       - name: Run ${{ matrix.tool || 'test' }}
         shell: bash
-        run: "toys ${{ matrix.tool || 'test' }} < /dev/null"
+        run: |
+          toys "${{ matrix.tool || 'test' }}" < /dev/null
+  post-push:
+    needs: [test]
+    if: ${{ always() && github.event_name == 'push' && github.repository_owner == 'dazuma' }}
+    runs-on: ubuntu-latest
+    env:
+      ruby_version: "2.7"
+    steps:
+      - name: Install Ruby ${{ env.ruby_version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.ruby_version }}
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Install Toys
+        run: "gem install --no-document toys"
+      - name: Handle release PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          toys release _postpush --verbose \
+            "--result=${{ needs.test.result }}" \
+            < /dev/null
