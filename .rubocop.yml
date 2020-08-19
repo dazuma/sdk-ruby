@@ -9,5 +9,7 @@ Metrics/ClassLength:
   Max: 200
 Metrics/ModuleLength:
   Max: 200
+Style/IfUnlessModifier:
+  Enabled: false
 Style/ModuleFunction:
   Enabled: false

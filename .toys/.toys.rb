@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
-expand :clean, paths: ["pkg", "doc", ".yardoc", "tmp"]
+expand :clean, paths: :gitignore
 
 expand :minitest, libs: ["lib"], bundler: true
 
-expand :rubocop, bundler: true
+expand :rubocop do |t|
+  t.options = ["lib", "test", "examples", ".toys", ".toys/release/.lib"]
+  t.use_bundler
+end
 
 expand :yardoc do |t|
   t.generate_output_flag = true
