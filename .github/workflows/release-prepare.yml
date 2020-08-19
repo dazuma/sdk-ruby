@@ -1,0 +1,39 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      gems:
+        description: Gem to release (leave blank to release all gems)
+        required: false
+        default: ""
+      version:
+        description: Override release version (leave blank to determine version automatically)
+        required: false
+        default: ""
+
+jobs:
+  release-prepare:
+    if: ${{ github.repository_owner == 'dazuma' }}
+    env:
+      ruby_version: "2.7"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Ruby ${{ env.ruby_version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.ruby_version }}
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Install Toys
+        run: "gem install --no-document toys"
+      - name: Prepare release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          toys release prepare --yes --verbose \
+            "--gem-list=${{ github.event.inputs.gems }}" \
+            "--override-version=${{ github.event.inputs.version }}" \
+            "--user-name=${{ secrets.GIT_USER_NAME }}" \
+            "--user-email=${{ secrets.GIT_USER_EMAIL }}" \
+            < /dev/null
