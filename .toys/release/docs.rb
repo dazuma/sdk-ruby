@@ -2,11 +2,13 @@
 
 desc "Pushes docs to gh-pages from the local checkout"
 
+required_arg :gem_name
 required_arg :version
-flag :tmp_dir, default: "tmp"
+
+flag :tmp_dir, "--tmp-dir=VAL", default: "tmp"
 flag :set_default_version, "--[no-]set-default-version", default: true
 flag :dry_run, "--[no-]dry-run", default: false
-flag :git_remote, "--git-remote=NAME", default: "origin"
+flag :git_remote, "--git-remote=VAL", default: "origin"
 
 include :exec, exit_on_nonzero_status: true
 include :fileutils
@@ -17,12 +19,12 @@ def run
   cd context_directory
 
   verify_git_clean warn_only: true
-  verify_library_version version, warn_only: true
-  verify_changelog_content version, warn_only: true
+  verify_library_version gem_name, version, warn_only: true
+  verify_changelog_content gem_name, version, warn_only: true
   verify_github_checks warn_only: true
 
   puts "WARNING: You are pushing docs locally, outside the normal process!", :bold, :red
-  unless confirm "Build and push yardocs for version #{version}? ", :bold
+  unless confirm "Build and push yardocs for #{gem_name} #{version}? ", :bold
     error "Push aborted"
   end
 
@@ -36,8 +38,8 @@ def run
     exec ["git", "checkout", "gh-pages"]
   end
 
-  build_docs version, gh_pages_dir
-  set_default_docs version, gh_pages_dir if set_default_version
+  build_docs gem_name, version, gh_pages_dir
+  set_default_docs gem_name, version, gh_pages_dir if set_default_version
 
-  push_docs version, gh_pages_dir, dry_run: dry_run, git_remote: git_remote
+  push_docs gem_name, version, gh_pages_dir, dry_run: dry_run, git_remote: git_remote
 end
