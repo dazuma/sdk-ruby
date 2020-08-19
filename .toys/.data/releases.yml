@@ -1,0 +1,5 @@
+main_branch: master
+owner: dazuma
+gems:
+  - name: cloud_events
+    toplevel_docs: true
