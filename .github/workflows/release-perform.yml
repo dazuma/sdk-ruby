@@ -1,12 +1,13 @@
-name: CloudEvents Release
+name: Perform Release
 
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+*"
+      - "*/v[0-9]+.[0-9]+.[0-9]+*"
 
 jobs:
-  release:
+  release-perform:
+    if: ${{ github.repository_owner == 'dazuma' }}
     env:
       ruby_version: "2.7"
     runs-on: ubuntu-latest
@@ -22,14 +23,15 @@ jobs:
         with:
           ref: "gh-pages"
           path: "tmp"
-      - name: Install dependencies
-        run: "bundle install && gem install --no-document toys"
+      - name: Install Toys
+        run: "gem install --no-document toys"
       - name: Perform release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
-          GIT_USER_NAME: ${{ secrets.GIT_USER_NAME }}
-          GIT_USER_EMAIL: ${{ secrets.GIT_USER_EMAIL }}
         run: |
-          toys release _remote --verbose --gh-pages-dir=tmp \
-            --enable-releases="${{ secrets.ENABLE_RELEASES }}"
+          toys release _perform --verbose \
+            "--api-key=${{ secrets.RUBYGEMS_API_KEY }}" \
+            "--user-name=${{ secrets.GIT_USER_NAME }}" \
+            "--user-email=${{ secrets.GIT_USER_EMAIL }}" \
+            "--enable-releases=${{ secrets.ENABLE_RELEASES }}" \
+            < /dev/null
