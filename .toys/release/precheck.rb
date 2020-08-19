@@ -2,18 +2,20 @@
 
 desc "Run release prechecks for the cloud_events gem"
 
+include :fileutils
 include :terminal
 include "release-tools"
 
+required_arg :gem_name
 required_arg :version
 
 def run
-  ::Dir.chdir context_directory
+  cd context_directory
 
-  puts "Running prechecks for releasing version #{version}...", :bold
+  puts "Running prechecks for releasing #{gem_name} #{version}...", :bold
   verify_git_clean
-  verify_library_version version
-  verify_changelog_content version
+  verify_library_version gem_name, version
+  verify_changelog_content gem_name, version
   verify_github_checks
 
   puts "SUCCESS", :green, :bold
