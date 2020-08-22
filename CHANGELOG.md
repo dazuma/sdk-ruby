@@ -1,5 +1,9 @@
 # Changelog
 
+### v0.1.2 / 2020-08-22
+
+* (No significant changes)
+
 ### v0.1.1 / 2020-07-20
 
 * Updated a few documentation links. No functional changes.
