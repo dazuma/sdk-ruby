@@ -2,87 +2,122 @@
 
 desc "Post-push job that runs on merge of a release PR"
 
-flag :sha, "--sha=VAL", default: ::ENV["GITHUB_SHA"]
+flag :ci_result, "--ci-result=VAL", default: "unknown"
+flag :enable_docs, "--enable-docs[=VAL]"
+flag :enable_releases, "--enable-releases[=VAL]"
+flag :gh_pages_dir, "--gh-pages-dir=VAL"
 flag :git_remote, "--git-remote=VAL", default: "origin"
-flag :result, "--result=VAL", default: "unknown"
+flag :git_user_email, "--git-user-email=VAL"
+flag :git_user_name, "--git-user-name=VAL"
+flag :github_sha, "--github-sha=VAL"
+flag :rubygems_api_key, "--rubygems-api-key=VAL"
 
 include :exec, exit_on_nonzero_status: true
 include :fileutils
 include :terminal, styled: true
-include "release-tools"
 
 def run
-  cd context_directory
-  verify_repo_identity git_remote: git_remote
+  require "release_utils"
+  require "release_perform"
 
-  pr = find_release_prs repo_path, merge_sha: sha
+  cd context_directory
+  utils = ReleaseUtils.new self
+
+  [:gh_pages_dir, :git_user_email, :git_user_name, :rubygems_api_key].each do |key|
+    set key, nil if get(key).to_s.empty?
+  end
+  set :github_sha, utils.current_sha if github_sha.to_s.empty?
+
+  pr = utils.find_release_prs merge_sha: github_sha
   if pr
-    pr_number = pr["number"]
     gem_name = pr["head"]["ref"].sub("release/", "")
-    logger.info "This appears to be a merge of release PR #{pr_number} for #{gem_name}."
-    if result == "success"
-      trigger_release pr_number, gem_name, pr
+    gem_version = utils.current_library_version gem_name
+    logger.info "This appears to be a merge of release PR #{pr['number']} for #{gem_name}."
+    if ci_result == "success"
+      perform_release gem_name, gem_version, pr, utils
+      mark_release_pr_as_completed gem_name, gem_version, pr, utils
     else
-      report_trigger_aborted pr_number, gem_name, pr
+      report_ci_failed gem_name, gem_version, pr, utils
     end
   else
     logger.info "This was not a merge of a release PR."
-    update_open_release_prs
+    update_open_release_prs utils
   end
 
   logger.info "Done."
-  error "CI failed, so failing post-push." unless result == "success"
+  error "CI result was #{ci_result}, so failing post-push." unless ci_result == "success"
 end
 
-def trigger_release pr_number, gem_name, pr
+def perform_release gem_name, gem_version, pr, utils
   logger.info "CI passed for the merge."
-  version = current_library_version gem_name
-  changelog = verify_changelog_content gem_name, version
-  logger.info "Creating Github release for #{gem_name} #{version} ..."
-  push_github_release sha, gem_name, version, changelog
-  logger.info "Updating release PR to report trigger success ..."
-  update_release_pr repo_path, pr_number,
-                    label:   release_triggered_label,
-                    message: "Triggered release of #{gem_name} #{version}.",
-                    cur_pr: pr
+  dry_run = /^t/i =~ enable_releases.to_s ? false : true
+  docs_builder = /^t/i =~ enable_docs.to_s ? proc { exec_separate_tool ["yardoc"] } : nil
+  performer = ReleasePerform.new utils,
+                                 release_sha: github_sha,
+                                 rubygems_api_key: rubygems_api_key,
+                                 git_remote: git_remote,
+                                 git_user_name: git_user_name,
+                                 git_user_email: git_user_email,
+                                 gh_pages_dir: gh_pages_dir,
+                                 docs_builder: docs_builder,
+                                 dry_run: dry_run
+  performer.instance(gem_name, gem_version).perform
 end
 
-def report_trigger_aborted pr_number, gem_name, pr
+def mark_release_pr_as_completed gem_name, gem_version, pr, utils
+  pr_number = pr["number"]
+  logger.info "Updating release PR ##{pr_number} ..."
+  message = "Released of #{gem_name} #{gem_version} complete!"
+  utils.update_release_pr pr_number,
+                          label: utils.release_complete_label,
+                          message: message,
+                          cur_pr: pr
+  logger.info "Updated release PR."
+end
+
+def report_ci_failed gem_name, gem_version, pr, utils
   logger.info "CI failed for the merge."
-  logger.info "Updating the release PR to report the error ..."
-  update_release_pr repo_path, pr_number,
-                    label:   release_error_label,
-                    message: "CI failed on merge. Did not trigger #{gem_name} release.",
-                    cur_pr: pr
+  pr_number = pr["number"]
+  logger.info "Updating the release PR ##{pr_number} to report the error ..."
+  message = "CI failed on merge. Did not trigger #{gem_name} #{gem_version} release."
+  utils.update_release_pr pr_number,
+                          label: utils.release_error_label,
+                          message: message,
+                          cur_pr: pr
   logger.info "Opening a new issue to report the failure ..."
   body = <<~STR
-    Release of: #{gem_name} #{current_library_version gem_name}
+    Release of: #{gem_name} #{gem_version}
     Release PR: ##{pr_number}
-    Commit: https://github.com/#{repo_path}/commit/#{sha}
+    Commit: https://github.com/#{utils.repo_path}/commit/#{github_sha}
   STR
-  response = capture ["gh", "issue", "create", "--repo", repo_path,
+  response = capture ["gh", "issue", "create", "--repo", utils.repo_path,
                       "--title", "Release PR ##{pr_number} failed CI.",
                       "--body", body]
   issue_number = ::JSON.parse(response)["number"]
   logger.info "Issue #{issue_number} opened."
 end
 
-def update_open_release_prs
+def update_open_release_prs utils
+  logger.info "Searching for open release PRs ..."
+  prs = utils.find_release_prs
+  if prs.empty?
+    logger.info "No existing release PRs to update."
+    return
+  end
   commit_message = capture ["git", "log", "-1", "--pretty=%B"]
   pr_message = <<~STR
     WARNING: An additional commit was added while this release PR was open.
     You may need to add to the changelog, or close this PR and prepare a new one.
 
-    Commit link: https://github.com/#{repo_path}/commit/#{sha}
+    Commit link: https://github.com/#{utils.repo_path}/commit/#{github_sha}
 
     Message:
     #{commit_message}
   STR
-  logger.info "Searching for open release PRs..."
-  prs = find_release_prs repo_path
   prs.each do |pr|
     pr_number = pr["number"]
     logger.info "Updating PR #{pr_number} ..."
-    update_release_pr repo_path, pr_number, message: pr_message, cur_pr: pr
+    utils.update_release_pr pr_number, message: pr_message, cur_pr: pr
   end
+  logger.info "Finished updating existing release PRs."
 end

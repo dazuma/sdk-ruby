@@ -1,4 +1,4 @@
-name: "(Continuous)"
+name: "(continuous)"
 
 on:
   push:
@@ -56,5 +56,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           toys release _postpush --verbose \
-            "--result=${{ needs.tests.result }}" \
+            "--ci-result=${{ needs.tests.result }}" \
+            "--enable-docs" \
+            "--enable-releases=${{ secrets.ENABLE_RELEASES }}" \
+            "--git-user-email=${{ secrets.GIT_USER_EMAIL }}" \
+            "--git-user-name=${{ secrets.GIT_USER_NAME }}" \
+            "--github-sha=${{ github.sha }}" \
+            "--rubygems-api-key=${{ secrets.RUBYGEMS_API_KEY }}" \
             < /dev/null
