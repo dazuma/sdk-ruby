@@ -1,19 +1,15 @@
-name: Prepare Release
+name: Prepare Release Pull Request
 
 on:
   workflow_dispatch:
     inputs:
       gems:
-        description: Gem to release (leave blank to release all gems)
-        required: false
-        default: ""
-      version:
-        description: Override release version (leave blank to determine version automatically)
+        description: Gems to release (leave blank to release all gems)
         required: false
         default: ""
 
 jobs:
-  prepare-release:
+  prepare-release-pr:
     if: ${{ github.repository_owner == 'dazuma' }}
     env:
       ruby_version: "2.7"
@@ -27,13 +23,13 @@ jobs:
         uses: actions/checkout@v2
       - name: Install Toys
         run: "gem install --no-document toys"
-      - name: Prepare release
+      - name: Prepare release pull request
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           toys release prepare --yes --verbose \
-            "--gem-list=${{ github.event.inputs.gems }}" \
-            "--override-version=${{ github.event.inputs.version }}" \
-            "--user-name=${{ secrets.GIT_USER_NAME }}" \
-            "--user-email=${{ secrets.GIT_USER_EMAIL }}" \
+            "--gems=${{ github.event.inputs.gems }}" \
+            "--git-user-email=${{ secrets.GIT_USER_EMAIL }}" \
+            "--git-user-name=${{ secrets.GIT_USER_NAME }}" \
+            "--release-ref=${{ github.ref }}" \
             < /dev/null
