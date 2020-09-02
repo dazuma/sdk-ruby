@@ -7,7 +7,7 @@ on:
 
 jobs:
   tests:
-    if: ${{ github.repository == 'cloudevents/sdk-ruby' }}
+    if: ${{ github.repository == 'dazuma/sdk-ruby' }}
     strategy:
       matrix:
         os: [ ubuntu-latest ]

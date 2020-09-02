@@ -31,6 +31,13 @@ class ReleasePerform
     @performed_initial_setup = false
   end
 
+  attr_reader :utils
+  attr_reader :release_sha
+  attr_reader :rubygems_api_key
+  attr_reader :docs_builder
+  attr_reader :gh_pages_dir
+  attr_reader :git_remote
+
   def dry_run?
     @dry_run
   end
@@ -39,13 +46,22 @@ class ReleasePerform
     !@docs_builder.nil?
   end
 
+  def skip_checks?
+    @skip_checks
+  end
+
+  def instance gem_name, gem_version, pr_info: nil
+    Instance.new self, gem_name, gem_version, pr_info
+  end
+
   def initial_setup
+    return if @performed_initial_setup
     unless @skip_checks
       @utils.verify_git_clean
       @utils.verify_repo_identity git_remote: @git_remote
       @utils.verify_github_checks ref: @release_sha
     end
-    if @docs_builder
+    if enable_docs?
       setup_gh_pages
     else
       @gh_pages_dir = nil
@@ -54,36 +70,27 @@ class ReleasePerform
     @performed_initial_setup = true
   end
 
-  def instance gem_name, gem_version
-    initial_setup unless @performed_initial_setup
-    Instance.new @utils, @dry_run, gem_name, gem_version, @release_sha, @skip_checks,
-                 @rubygems_api_key, @docs_builder, @gh_pages_dir, @git_remote
-  end
-
   # A release instance
   class Instance
-    def initialize utils, dry_run, gem_name, gem_version, release_sha, skip_checks,
-                   rubygems_api_key, docs_builder, gh_pages_dir, git_remote
-      @utils = utils
-      @dry_run = dry_run
+    # @private
+    def initialize parent, gem_name, gem_version, pr_info
+      @parent = parent
       @gem_name = gem_name
       @gem_version = gem_version
-      @release_sha = release_sha
-      @skip_checks = skip_checks
-      @rubygems_api_key = rubygems_api_key
-      @docs_builder = docs_builder
-      @gh_pages_dir = gh_pages_dir
-      @git_remote = git_remote
+      @pr_info = pr_info
+      @utils = parent.utils
     end
 
     attr_reader :gem_name
     attr_reader :gem_version
 
     def perform only: nil # rubocop:disable Metrics/CyclomaticComplexity,Metrics/PerceivedComplexity
-      verify unless @skip_checks
+      @utils.on_error { |content| report_release_error content }
+      @parent.initial_setup
+      verify unless @parent.skip_checks?
 
       include_gem = !only || only == "gem"
-      include_docs = @docs_builder && (!only || only == "docs")
+      include_docs = @parent.enable_docs? && (!only || only == "docs")
       include_github_release = !only || only == "github-release"
 
       build_gem if include_gem
@@ -96,6 +103,8 @@ class ReleasePerform
       push_gem if include_gem
       push_docs if include_docs
 
+      @utils.clear_error_proc
+      report_release_complete
       self
     end
 
@@ -108,7 +117,7 @@ class ReleasePerform
     def create_github_release content = nil
       @utils.logger.info "Creating github release of #{@gem_name} #{@gem_version} ..."
       body = ::JSON.dump tag_name:         "#{@gem_name}/v#{@gem_version}",
-                         target_commitish: @release_sha,
+                         target_commitish: @parent.release_sha,
                          name:             "#{@gem_name} #{@gem_version}",
                          body:             content.strip
       @utils.exec ["gh", "api", "repos/#{@utils.repo_path}/releases", "--input", "-",
@@ -122,7 +131,8 @@ class ReleasePerform
       @utils.logger.info "Building #{@gem_name} #{@gem_version} gem ..."
       @utils.gem_cd @gem_name do
         ::FileUtils.mkdir_p "pkg"
-        @utils.exec ["gem", "build", "#{@gem_name}.gemspec", "-o", "pkg/#{@gem_name}-#{@gem_version}.gem"]
+        @utils.exec ["gem", "build", "#{@gem_name}.gemspec",
+                     "-o", "pkg/#{@gem_name}-#{@gem_version}.gem"]
       end
       @utils.logger.info "Gem built"
       self
@@ -133,7 +143,7 @@ class ReleasePerform
       @utils.gem_cd @gem_name do
         built_file = "pkg/#{@gem_name}-#{@gem_version}.gem"
         @utils.error "#{built_file} didn't get built." unless ::File.file? built_file
-        if @dry_run
+        if @parent.dry_run?
           @utils.logger.info "DRY RUN: Gem pushed to Rubygems"
         else
           @utils.exec ["gem", "push", built_file]
@@ -144,13 +154,14 @@ class ReleasePerform
     end
 
     def build_docs
-      @utils.error "Cannot build docs" unless @docs_builder
+      @utils.error "Cannot build docs" unless @parent.enable_docs?
       @utils.logger.info "Building #{@gem_name} #{@gem_version} docs..."
       @utils.gem_cd @gem_name do
         ::FileUtils.rm_rf ".yardoc"
         ::FileUtils.rm_rf "doc"
-        @docs_builder.call
-        path = ::File.expand_path @utils.gem_info(@gem_name, "gh_pages_directory"), @gh_pages_dir
+        @parent.docs_builder.call
+        path = ::File.expand_path @utils.gem_info(@gem_name, "gh_pages_directory"),
+                                  @parent.gh_pages_dir
         path = ::File.expand_path "v#{@gem_version}", path
         ::FileUtils.rm_rf path
         ::FileUtils.cp_r "doc", path
@@ -160,9 +171,9 @@ class ReleasePerform
     end
 
     def set_default_docs_version
-      @utils.error "Cannot set default #{@gem_name} docs version" unless @docs_builder
+      @utils.error "Cannot set default #{@gem_name} docs version" unless @parent.enable_docs?
       @utils.logger.info "Changing default #{@gem_name} docs version to #{@gem_version}..."
-      path = "#{@gh_pages_dir}/404.html"
+      path = "#{@parent.gh_pages_dir}/404.html"
       content = ::IO.read path
       var_name = @utils.gem_info @gem_name, "gh_pages_version_var"
       content.sub!(/#{var_name} = "[\w\.]+";/,
@@ -176,19 +187,55 @@ class ReleasePerform
 
     def push_docs
       @utils.logger.info "Pushing #{@gem_name} docs to gh-pages ..."
-      ::Dir.chdir @gh_pages_dir do
+      ::Dir.chdir @parent.gh_pages_dir do
         @utils.exec ["git", "add", "."]
         commit_cmd = ["git", "commit", "-m", "Generate yardocs for #{@gem_name} #{@gem_version}"]
         commit_cmd << "--signoff" if @utils.signoff_commits?
         @utils.exec commit_cmd
-        if @dry_run
-          @utils.logger.info "DRY RUN: Docs pushed to gh-pages"
-        else
-          @utils.exec ["git", "push", @git_remote, "gh-pages"]
-          @utils.logger.info "Docs pushed to gh-pages"
-        end
+        @utils.exec ["git", "push", @parent.git_remote, "gh-pages"]
       end
+      @utils.logger.info "Docs pushed to gh-pages"
       self
+    end
+
+    def report_release_error content
+      return unless @pr_info
+      pr_number = @pr_info["number"]
+      @utils.logger.info "Updating the release PR ##{pr_number} to report an error ..."
+      @utils.update_release_pr pr_number,
+                               label:   @utils.release_error_label,
+                               message: "Release failed.\n#{content}",
+                               cur_pr:  @pr_info
+      @utils.logger.info "Opening a new issue to report the failure ..."
+      body = <<~STR
+        A release failed.
+
+        Release PR: ##{pr_number}
+        Commit: https://github.com/#{@utils.repo_path}/commit/#{@parent.release_sha}
+
+        Error message:
+        #{content}
+      STR
+      title = "Release PR ##{pr_number} failed with an error"
+      input = ::JSON.dump title: title, body: body
+      response = @utils.capture ["gh", "api", "repos/#{repo_path}/issues", "--input", "-",
+                                 "-H", "Accept: application/vnd.github.v3+json"],
+                                in: [:string, input]
+      issue_number = ::JSON.parse(response)["number"]
+      @utils.logger.info "Issue #{issue_number} opened."
+      self
+    end
+
+    def report_release_complete
+      return unless @pr_info
+      pr_number = @pr_info["number"]
+      @utils.logger.info "Marking release PR ##{pr_number} complete ..."
+      message = "Released of #{@gem_name} #{@gem_version} complete!"
+      @utils.update_release_pr pr_number,
+                               label:   @utils.release_complete_label,
+                               message: message,
+                               cur_pr:  @pr_info
+      @utils.logger.info "Updated release PR."
     end
   end
 
