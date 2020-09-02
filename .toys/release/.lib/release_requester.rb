@@ -4,14 +4,14 @@ require "fileutils"
 require "release_utils"
 
 # A class that creates release PRs
-class ReleasePrepare
+class ReleaseRequester
   def initialize utils,
                  release_ref: nil,
                  git_remote: nil,
                  git_user_name: nil,
                  git_user_email: nil
     @utils = utils
-    @release_ref = release_ref
+    @release_ref = release_ref || utils.current_branch
     @git_remote = git_remote || "origin"
     @git_user_name = git_user_name
     @git_user_email = git_user_email
@@ -19,7 +19,7 @@ class ReleasePrepare
   end
 
   def initial_setup
-    @utils.error "Releases must be prepared from an existing branch" unless @release_ref
+    @utils.error "Releases must be requested from an existing branch" unless @release_ref
     @utils.verify_git_clean
     @utils.verify_repo_identity git_remote: @git_remote
     @utils.verify_github_checks ref: @release_ref
@@ -65,7 +65,7 @@ class ReleasePrepare
     attr_reader :release_commit_title
     attr_reader :release_branch_name
 
-    def prepare
+    def request
       modify_version_file
       modify_changelog_file
       create_release_commit
