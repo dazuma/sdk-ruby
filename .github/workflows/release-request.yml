@@ -1,4 +1,4 @@
-name: Prepare Release Pull Request
+name: Request Release
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   prepare-release-pr:
-    if: ${{ github.repository == 'cloudevents/sdk-ruby' }}
+    if: ${{ github.repository == 'dazuma/sdk-ruby' }}
     env:
       ruby_version: "2.7"
     runs-on: ubuntu-latest
@@ -23,11 +23,11 @@ jobs:
         uses: actions/checkout@v2
       - name: Install Toys
         run: "gem install --no-document toys"
-      - name: Prepare release pull request
+      - name: Open release pull request
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          toys release prepare --yes --verbose \
+          toys release request --yes --verbose \
             "--gems=${{ github.event.inputs.gems }}" \
             "--git-user-email=${{ secrets.GIT_USER_EMAIL }}" \
             "--git-user-name=${{ secrets.GIT_USER_NAME }}" \
