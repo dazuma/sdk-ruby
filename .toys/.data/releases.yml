@@ -1,4 +1,4 @@
-repo: cloudevents/sdk-ruby
+repo: dazuma/sdk-ruby
 main_branch: master
 signoff_commits: true
 gems:

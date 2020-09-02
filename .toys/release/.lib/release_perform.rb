@@ -181,12 +181,8 @@ class ReleasePerform
         commit_cmd = ["git", "commit", "-m", "Generate yardocs for #{@gem_name} #{@gem_version}"]
         commit_cmd << "--signoff" if @utils.signoff_commits?
         @utils.exec commit_cmd
-        if @dry_run
-          @utils.logger.info "DRY RUN: Docs pushed to gh-pages"
-        else
-          @utils.exec ["git", "push", @git_remote, "gh-pages"]
-          @utils.logger.info "Docs pushed to gh-pages"
-        end
+        @utils.exec ["git", "push", @git_remote, "gh-pages"]
+        @utils.logger.info "Docs pushed to gh-pages"
       end
       self
     end

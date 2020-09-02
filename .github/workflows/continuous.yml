@@ -7,7 +7,7 @@ on:
 
 jobs:
   tests:
-    if: ${{ github.repository == 'cloudevents/sdk-ruby' }}
+    if: ${{ github.repository == 'dazuma/sdk-ruby' }}
     strategy:
       matrix:
         os: [ ubuntu-latest ]
@@ -38,7 +38,7 @@ jobs:
           toys "${{ matrix.tool || 'test' }}" < /dev/null
   post-push:
     needs: [tests]
-    if: ${{ always() && github.repository == 'cloudevents/sdk-ruby' }}
+    if: ${{ always() && github.repository == 'dazuma/sdk-ruby' }}
     runs-on: ubuntu-latest
     env:
       ruby_version: "2.7"
@@ -55,11 +55,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          toys release perform --yes --verbose \
-            "--ci-result=${{ needs.tests.result }}" \
-            "--enable-releases=${{ secrets.ENABLE_RELEASES }}" \
-            "--git-user-email=${{ secrets.GIT_USER_EMAIL }}" \
-            "--git-user-name=${{ secrets.GIT_USER_NAME }}" \
-            "--github-sha=${{ github.sha }}" \
-            "--rubygems-api-key=${{ secrets.RUBYGEMS_API_KEY }}" \
-            < /dev/null
+          toys release _postpush --verbose "${{ needs.tests.result }}" < /dev/null
