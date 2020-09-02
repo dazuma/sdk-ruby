@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
-desc "Prepare a gem release"
+desc "Request a gem release"
 
 long_desc \
   "This tool analyzes the commits since the last release, and updates the" \
     " library version and changelog accordingly. It opens a release pull" \
-    " request with those changes. The actual release can be triggered by" \
-    " merging that pull request. This tool is normally called from a GitHub" \
-    " Actions workflow, but can also be executed locally.",
+    " request with those changes. Typically, when this pull request is" \
+    " merged, the post-push workflow will run automatically and perform the" \
+    " release. This tool is normally called from a GitHub Actions workflow," \
+    " but can also be executed locally.",
   "",
   "When invoked, this tool first performs checks including:",
   "* The git workspace must be clean (no new, modified, or deleted files)",
@@ -75,7 +76,7 @@ include :fileutils
 
 def run
   require "release_utils"
-  require "release_prepare"
+  require "release_requester"
 
   cd context_directory
   utils = ReleaseUtils.new self
@@ -88,20 +89,20 @@ def run
 
   instances.each do |instance|
     next unless should_build instance
-    instance.prepare
+    instance.request
   end
 end
 
 def build_instances utils
-  preparer = ReleasePrepare.new utils,
-                                release_ref:    release_ref,
-                                git_remote:     git_remote,
-                                git_user_name:  git_user_name,
-                                git_user_email: git_user_email
+  requester = ReleaseRequester.new utils,
+                                   release_ref:    release_ref,
+                                   git_remote:     git_remote,
+                                   git_user_name:  git_user_name,
+                                   git_user_email: git_user_email
   gem_list = gems.to_s.empty? ? utils.all_gems : gems.split(/[\s,]+/)
   gem_list.map do |gem_info|
     gem_name, override_version = gem_info.split ":", 2
-    preparer.instance gem_name, override_version: override_version
+    requester.instance gem_name, override_version: override_version
   end
 end
 

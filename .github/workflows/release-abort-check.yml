@@ -6,7 +6,7 @@ on:
 
 jobs:
   aborted-release-check:
-    if: ${{ github.repository == 'cloudevents/sdk-ruby' && !github.event.pull_request.merged_at }}
+    if: ${{ github.repository == 'dazuma/sdk-ruby' && !github.event.pull_request.merged_at }}
     env:
       ruby_version: "2.7"
     runs-on: ubuntu-latest
@@ -23,6 +23,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          toys release abort --verbose \
+          toys release _on-pr-closed --verbose \
             "--event-path=${{ github.event_path }}" \
             < /dev/null
