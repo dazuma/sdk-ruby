@@ -7,19 +7,19 @@ on:
 
 jobs:
   tests:
-    if: ${{ github.repository == 'cloudevents/sdk-ruby' }}
+    if: ${{ github.repository == 'dazuma/sdk-ruby' }}
     strategy:
       matrix:
-        os: [ ubuntu-latest ]
-        ruby: [ "2.4", "2.5", "2.6", "2.7", "jruby" ]
+        # os: [ ubuntu-latest ]
+        # ruby: [ "2.4", "2.5", "2.6", "2.7", "jruby" ]
         include:
           - os: ubuntu-latest
             ruby: "2.7"
             tool: ci
-          - os: macos-latest
-            ruby: "2.7"
-          - os: windows-latest
-            ruby: "2.7"
+          # - os: macos-latest
+          #   ruby: "2.7"
+          # - os: windows-latest
+          #   ruby: "2.7"
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -38,7 +38,7 @@ jobs:
           toys "${{ matrix.tool || 'test' }}" < /dev/null
   post-push:
     needs: [tests]
-    if: ${{ always() && github.repository == 'cloudevents/sdk-ruby' }}
+    if: ${{ always() && github.repository == 'dazuma/sdk-ruby' }}
     runs-on: ubuntu-latest
     env:
       ruby_version: "2.7"

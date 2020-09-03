@@ -10,7 +10,7 @@ on:
 
 jobs:
   prepare-release-pr:
-    if: ${{ github.repository == 'cloudevents/sdk-ruby' }}
+    if: ${{ github.repository == 'dazuma/sdk-ruby' }}
     env:
       ruby_version: "2.7"
     runs-on: ubuntu-latest
